@@ -1,7 +1,9 @@
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include <iostream>
+#include <random>
 #include <vector>
+#include <memory>
 #include <GLFW/glfw3.h>
 #include <GL/GL.h>
 #include <glm/glm.hpp>
@@ -12,83 +14,184 @@ GLFWwindow* StartGLFW();
 
 const float SCREEN_WIDTH = 800.0f;
 const float SCREEN_HEIGHT = 600.0f;
-const float GRAVITY = -9.81 / 20.0f;
 
 class Particle {
     public:
         glm::vec2 position;
-        glm::vec2 velocity;
-        float radius;
+        glm::vec2 position_last;
+        glm::vec2 acceleration;
+        float radius = 10.0f;
+        float mass = 100.0f;
 
-        Particle(const glm::vec2& pos, const glm::vec2& vel, float r)
-            : position(pos), velocity(vel), radius(r) {}
+        Particle(const glm::vec2& position_, float radius_)
+            : position(position_), position_last(position_), radius(radius_) {
+            }
 
-        void accelerate(float x, float y) {
-            velocity.x += x;
-            velocity.y += y;
+        void updatePos(float dt){
+            glm::vec2 displacement = position - position_last;
+            position_last = position;
+            position = position + displacement + acceleration * (dt * dt);
+            acceleration = {};
         }
 
-        void updatePos(float deltaTime) {
-            position += velocity * deltaTime * 60.0f;  // Scale for ~60 FPS
+        void accelerate(glm::vec2 a){
+            acceleration += a;
         }
 
-        void handleScreenBoundaryCollisions() {
-            if (position.y - radius < 0) {
-                position.y = radius;
-                velocity.y *= -0.8f;
-            }
-            if (position.y + radius > SCREEN_HEIGHT) {
-                position.y = SCREEN_HEIGHT - radius;
-                velocity.y *= -0.8f;
-            }
-            if (position.x - radius < 0) {
-                position.x = radius;
-                velocity.x *= -0.8f;
-            }
-            if (position.x + radius > SCREEN_WIDTH) {
-                position.x = SCREEN_WIDTH - radius;
-                velocity.x *= -0.8f;
-            }
+        void setVelocity(glm::vec2 v, float dt){
+            position_last = position - (v * dt);
         }
 
-        void handleParticleCollision(Particle& other){
-            glm::vec2 diff = other.position - position;
-            float dSquared = glm::length2(diff);
-            float sumR = radius + other.radius;
+        void addVelocity(glm::vec2 v, float dt){
+            position_last -= v * dt;
+        }
 
-            if (dSquared < sumR * sumR){
-                float d = sqrt(dSquared);
-                glm::vec2 unitDCollision = diff / d;
+        glm::vec2 getVelocity(){
+            return position - position_last;
+        }
 
-                glm::vec2 relativeV = velocity - other.velocity;
-
-                float vAngle = glm::dot(relativeV, unitDCollision);
-                if (vAngle > 0) return;  // Ignore if moving apart
-
-                velocity -= unitDCollision * vAngle;
-                other.velocity += unitDCollision * vAngle;
-
-                // Push particles apart to prevent overlap
-                float overlap = (sumR - d) / 2.0f;
-                position -= unitDCollision * overlap;
-                other.position += unitDCollision * overlap;
+        void draw(int num_segments) {
+            glBegin(GL_TRIANGLE_FAN);
+            glVertex2f(position.x, position.y);
+        
+            for (int i = 0; i <= num_segments; ++i) {
+                float angle = 2.0f * 3.14159265359f * (float(i) / num_segments);
+                float x = position.x + cos(angle) * radius;
+                float y = position.y + sin(angle) * radius;
+                glVertex2f(x, y);
             }
+        
+            glEnd();
+        }
+
+        
+};
+
+struct BoundingArea {
+    virtual ~BoundingArea() = default;
+    virtual int getType() = 0; // Make this a pure virtual function
+};
+
+struct RectBoundingArea : BoundingArea{
+    public:
+        float top_line;
+        float bottom_line;
+        float left_side;
+        float right_side;
+        
+        RectBoundingArea(float width, float height){
+            float offset_width = (SCREEN_WIDTH - width) / 2;
+            float offset_height = (SCREEN_HEIGHT - height) / 2;
+            
+            top_line = offset_height;
+            bottom_line = SCREEN_HEIGHT - offset_height;
+
+            left_side = offset_width;
+            right_side = SCREEN_WIDTH - offset_width;
+        }
+
+        int getType(){
+            return 1;
         }
 };
 
-void DrawCircle(float centerX, float centerY, float radius, int numSegments) {
-    glBegin(GL_TRIANGLE_FAN);
-    glVertex2f(centerX, centerY);
+struct CircleBoundingArea : BoundingArea{
+    public:
+        glm::vec2 center;
+        float radius;
+        
+        CircleBoundingArea(glm::vec2 center_, float radius_) 
+        : center(center_), radius(radius_) {}
 
-    for (int i = 0; i <= numSegments; ++i) {
-        float angle = 2.0f * 3.14159265359f * (float(i) / numSegments);
-        float x = centerX + cos(angle) * radius;
-        float y = centerY + sin(angle) * radius;
-        glVertex2f(x, y);
+        int getType(){
+            return 2;
+        }
+};
+
+class Solver{
+    public:
+    Solver() = default;
+
+    Particle& addObject(glm::vec2 position, float radius){
+        Particle new_particle = Particle(position, radius);
+        return objects.emplace_back(new_particle);
     }
 
-    glEnd();
-}
+    void render(){
+        for (auto& obj : objects){
+            obj.draw(100);
+        }
+    }
+
+    void update(){
+        applyGravity();
+        applyBoundary();
+        updateObjects(step_dt);
+    }
+
+    void addBoundary(std::unique_ptr<BoundingArea> boundary) {
+        bounding_area = std::move(boundary);
+    }
+
+    private:
+    std::vector<Particle> objects;
+    glm::vec2 gravity = {0.0f, -100.0f};
+    float step_dt = 1.0f / 60;
+
+    float bounce_coefficient = 0.95f;
+
+    std::unique_ptr<BoundingArea> bounding_area;
+
+    void applyGravity(){
+        for (auto& obj : objects){
+            obj.accelerate(gravity);
+        }
+    }
+
+    void applyBoundary(){
+        const int boundary_type = bounding_area->getType();
+        
+        for (auto& obj : objects){
+            glm::vec2 velocity = obj.getVelocity(); 
+            
+            if(boundary_type == 1){
+                RectBoundingArea* rect_boundary = dynamic_cast<RectBoundingArea*>(bounding_area.get());
+
+                if (obj.position.y - obj.radius <= rect_boundary->top_line){
+                    obj.position.y = rect_boundary->top_line + obj.radius;
+                    velocity.y *= -bounce_coefficient; 
+                    obj.setVelocity(velocity, 1.0f);
+                }
+                if (obj.position.y + obj.radius > rect_boundary->bottom_line){
+                    obj.position.y = rect_boundary->bottom_line - obj.radius;
+                    velocity.y *= -bounce_coefficient; 
+                    obj.setVelocity(velocity, 1.0f);
+                }
+                if (obj.position.x - obj.radius < rect_boundary->left_side){
+                    obj.position.x = rect_boundary->left_side + obj.radius;
+                    velocity.x *= -bounce_coefficient;
+                    obj.setVelocity(velocity, 1.0f);
+                }
+                if (obj.position.x + obj.radius > rect_boundary->right_side){
+                    obj.position.x = rect_boundary->right_side - obj.radius;
+                    velocity.x *= -bounce_coefficient;
+                    obj.setVelocity(velocity, 1.0f);
+                }
+            }
+            if (boundary_type == 2)
+            {
+                
+            }
+            
+        }
+    }
+
+    void updateObjects(float dt){
+        for (auto& obj : objects){
+            obj.updatePos(dt);
+        }
+    }
+};
 
 int main() {
     GLFWwindow* window = StartGLFW();
@@ -99,36 +202,15 @@ int main() {
     glLoadIdentity();
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
-    std::vector<Particle> particles = {
-        Particle({400.0f, 500.0f}, {1.0f, 0.0f}, 30.0f),
-        Particle({300.0f, 200.0f}, {-1.0f, 2.0f}, 40.0f)
-    };
-
-    float lastTime = glfwGetTime(); 
+    Solver solver;
+    auto& object = solver.addObject({420.0f, 100.0f}, 10.0f);
+    solver.addBoundary(std::make_unique<RectBoundingArea>(800.0f, 600.0f));
 
     while (!glfwWindowShouldClose(window)) {
-        float currentTime = glfwGetTime();
-        float deltaTime = currentTime - lastTime;
-        lastTime = currentTime;
-
         glClear(GL_COLOR_BUFFER_BIT);
 
-        for (auto& particle : particles) {
-            particle.accelerate(0.0f, GRAVITY * deltaTime * 60.0f); 
-            particle.updatePos(deltaTime);
-            particle.handleScreenBoundaryCollisions();
-            DrawCircle(particle.position.x, particle.position.y, particle.radius, 100);
-        }
-
-         for (size_t i = 0; i < particles.size(); i++) {
-            for (size_t j = i + 1; j < particles.size(); j++) {
-                particles[i].handleParticleCollision(particles[j]);
-            }
-        }
-
-        for (auto& particle : particles) {
-            DrawCircle(particle.position.x, particle.position.y, particle.radius, 100);
-        }
+        solver.update();
+        solver.render();
 
         glfwSwapBuffers(window);
         glfwPollEvents();
