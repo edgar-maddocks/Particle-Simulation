@@ -61,6 +61,10 @@ class Solver{
         return substeps;
     }
 
+    std::unique_ptr<BoundingArea>& getBoundary(){
+        return bounding_area;
+    }
+
     void updateObjects(float dt){
         for (auto& obj : objects){
             obj.updatePos(dt);
@@ -98,6 +102,18 @@ class Solver{
             float dist = glm::length(dir);
             glm::vec2 a = dir * std::max(0.0f, (120 - dist));
             obj.accelerate(a);
+        }
+    }
+
+    void renderBoundary(){
+        const int bounding_type = bounding_area->getType();
+        if (bounding_type == 1){
+            RectBoundingArea* rect_boundary = dynamic_cast<RectBoundingArea*>(bounding_area.get());
+            rect_boundary->draw();
+        }
+        else if (bounding_type == 2){
+            CircleBoundingArea* circle_boundary = dynamic_cast<CircleBoundingArea*>(bounding_area.get());
+            circle_boundary->draw(5000);
         }
     }
 
@@ -235,18 +251,6 @@ class Solver{
     void renderObjects(){
         for (auto& obj : objects){
             obj.draw(100);
-        }
-    }
-
-    void renderBoundary(){
-        const int bounding_type = bounding_area->getType();
-        if (bounding_type == 1){
-            RectBoundingArea* rect_boundary = dynamic_cast<RectBoundingArea*>(bounding_area.get());
-            rect_boundary->draw();
-        }
-        else if (bounding_type == 2){
-            CircleBoundingArea* circle_boundary = dynamic_cast<CircleBoundingArea*>(bounding_area.get());
-            circle_boundary->draw(5000);
         }
     }
 };
