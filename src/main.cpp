@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <random>
+#include <tuple>
 #include <vector>
 #include <memory>
 #include <GLFW/glfw3.h>
@@ -10,6 +11,7 @@
 #include <glm/gtx/norm.hpp>
 
 #include "consts.cpp"
+#include "utils.cpp"
 #include "boundaries/boundaries.hpp"
 #include "particle/particle.hpp"
 #include "solver/solver.hpp"
@@ -18,18 +20,10 @@
 
 GLFWwindow* StartGLFW();
 
-void setUpGL(){
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    glOrtho(0, SCREEN_WIDTH, 0, SCREEN_HEIGHT, -1, 1);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
-}
 
 int main() {
     GLFWwindow* window = StartGLFW();
-    setUpGL();
+    setUpGL(std::make_tuple(1.0f, 1.0f, 1.0f, 1.0f));
 
     Solver solver;
 
@@ -39,6 +33,8 @@ int main() {
     solver.addBoundary(CircleBoundingArea::create(SCREEN_WIDTH/2, SCREEN_HEIGHT/2, 400.0f));
 
     while (!glfwWindowShouldClose(window)) {
+        glClear(GL_COLOR_BUFFER_BIT);
+        
         float current_time = glfwGetTime();
         float delta_time = current_time - last_time;
         last_time = current_time;
@@ -49,8 +45,6 @@ int main() {
             auto& object = solver.addObject(SPAWN_POSITION, 15.0f);
             solver.setObjectVelocity(object, glm::vec2({1.0f, -1.0f}) * SPAWN_VELOCITY);
         }
-
-        glClear(GL_COLOR_BUFFER_BIT);
 
         int state = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
         if (state == GLFW_PRESS)
@@ -71,17 +65,4 @@ int main() {
     return 0;
 }
 
-GLFWwindow* StartGLFW() {
-    if (!glfwInit()) {
-        std::cerr << "Failed to initialize GLFW!" << std::endl;
-        return nullptr;
-    }
-    GLFWwindow* window = glfwCreateWindow(SCREEN_WIDTH, SCREEN_HEIGHT, "OpenGL Particles", NULL, NULL);
-    if (!window) {
-        std::cerr << "Failed to create GLFW window!" << std::endl;
-        glfwTerminate();
-        return nullptr;
-    }
-    glfwMakeContextCurrent(window);
-    return window;
-}
+

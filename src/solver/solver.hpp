@@ -4,6 +4,8 @@
 
 #include <vector>
 #include <memory>
+#include <algorithm>
+#include <unordered_map>
 #include <GLFW/glfw3.h>
 #include <GL/GL.h>
 #include <glm/glm.hpp>
@@ -11,6 +13,15 @@
 
 #include "../particle/particle.hpp"
 #include "../boundaries/boundaries.hpp"
+
+struct pair_hash {
+    template <class T1, class T2>
+    std::size_t operator() (const std::pair<T1, T2>& p) const {
+        auto hash1 = std::hash<T1>{}(p.first);
+        auto hash2 = std::hash<T2>{}(p.second);
+        return hash1 ^ (hash2 << 1); // or use boost::hash_combine
+    }
+};
 
 class Solver{
     public:
@@ -22,17 +33,50 @@ class Solver{
     }
 
     void render(){
-        renderBoundary();
+        if (bounding_area){
+            renderBoundary();
+        }
         renderObjects();
     }
 
     void update(){
+        updateGrid();
         const float substep_dt = step_dt / substeps;
         for (int i = 0; i < substeps; ++i){
             applyGravity();
             updateObjects(substep_dt);
             checkAllParticleCollisions();
-            applyBoundary();
+            if (bounding_area){
+                applyBoundary();
+            }
+            
+        }
+    }
+
+    float getStepDt(){
+        return step_dt;
+    }
+
+    int getSubsteps(){
+        return substeps;
+    }
+
+    void updateObjects(float dt){
+        for (auto& obj : objects){
+            obj.updatePos(dt);
+        }
+    }
+
+    void checkAllParticleCollisions(){
+        updateGrid();
+        for (const auto& cell : cell_map){
+            const auto& particles = cell.second;
+            for (size_t i = 0; i < particles.size(); ++i){
+                for (size_t j = i + 1; j < particles.size(); ++j) {
+                    checkOneParticleCollision(*particles[i], *particles[j]);
+                }
+            }
+            checkNeighbouringCells(cell.first);
         }
     }
 
@@ -40,7 +84,7 @@ class Solver{
         bounding_area = std::move(boundary);
     }
 
-    std::vector<Particle> getObjects(){
+    std::vector<Particle>& getObjects(){
         return objects;
     }
 
@@ -57,19 +101,30 @@ class Solver{
         }
     }
 
-    float generateRandom(const float max, const float min){
-        return min + static_cast<float>(rand()) / (static_cast<float>(RAND_MAX/(max - min)));
+    void setGravity(glm::vec2 g){
+        gravity = g;
+    }
+
+    void setStepDt(float dt){
+        step_dt = dt;
+    }
+
+    void setSubsteps(int substeps_){
+        substeps = substeps_;
     }
 
     private:
     std::vector<Particle> objects;
     glm::vec2 gravity = glm::vec2({0.0f, -9.81f});
     float step_dt = 1.0f / 60.0f;
-    const int substeps = 8;
+    int substeps = 8;
 
     float bounce_coefficient = 0.9f;
 
     std::unique_ptr<BoundingArea> bounding_area;
+
+    float cell_size = 50.0f;
+    std::unordered_map<std::pair<int, int>, std::vector<Particle*>, pair_hash> cell_map;
 
     void applyGravity(){
         for (auto& obj : objects){
@@ -107,29 +162,57 @@ class Solver{
                     obj.setVelocity(velocity, 1.0f);
                 }
             }
-            else if (boundary_type == 2)
-            {
+            else if (boundary_type == 2) {
                 CircleBoundingArea* circle_boundary = dynamic_cast<CircleBoundingArea*>(bounding_area.get());
-
-                const glm::vec2 diff = circle_boundary->center - obj.position;
-                const float dist_from_center = glm::length(diff);
-                if (dist_from_center > circle_boundary->radius - obj.radius){
-                    const glm::vec2 n = diff / dist_from_center;
-                    const glm::vec2 perp = {-n.y, n.x};
-                    const glm::vec2 v = obj.getVelocity();
-                    obj.position = circle_boundary->center -  n * (circle_boundary->radius - obj.radius);
-                    obj.setVelocity((2.0f * (v.x * perp.x + v.y * perp.y) * perp - v) * bounce_coefficient, 1.0f);
+            
+                glm::vec2 to_particle = obj.position - circle_boundary->center;
+                float dist_from_center = glm::length(to_particle);
+            
+                if (dist_from_center > circle_boundary->radius - obj.radius) {
+                    glm::vec2 normal = to_particle / dist_from_center;
+                    glm::vec2 velocity = obj.getVelocity();
+            
+                    float velocity_normal = glm::dot(velocity, normal);
+            
+                    if (velocity_normal > 0) {
+                        velocity -= (1.0f + bounce_coefficient) * velocity_normal * normal;
+                    }
+            
+                    obj.position = circle_boundary->center + normal * (circle_boundary->radius - obj.radius);
+                    obj.setVelocity(velocity, 1.0f);
                 }
             }
-            
         }
     }
 
-    void checkAllParticleCollisions(){
-        const int num_objects = objects.size();
-        for (int i = 0; i < num_objects; ++i){
-            for (int j = i + 1; j < num_objects; ++j){
-                checkOneParticleCollision(objects[i], objects[j]);
+    void updateGrid() {
+        cell_map.clear();
+        for (auto& obj: objects){
+            auto cell = getCell(obj.position);
+            cell_map[cell].push_back(&obj);
+        }
+    }
+
+    std::pair<int, int> getCell(const glm::vec2& pos) const {
+        int x = static_cast<int>(pos.x / cell_size);
+        int y = static_cast<int>(pos.y / cell_size);
+        return {x, y};
+    }
+
+    void checkNeighbouringCells(const std::pair<int, int>& cell){
+        static const std::vector<std::pair<int, int>> neighbours = {
+            {0, 1}, {1, 0}, {1, 1}, {1, -1}
+        };
+        const auto& particles = cell_map[cell];
+        for (const auto& offset : neighbours) {
+            std::pair<int, int> neighbour_cell = {cell.first + offset.first, cell.second + offset.second};
+            if (cell_map.find(neighbour_cell) != cell_map.end()){
+                const auto& neighbour_particles = cell_map[neighbour_cell];
+                for (auto& obj : particles){
+                    for (auto& other : neighbour_particles){
+                        checkOneParticleCollision(*obj, *other);
+                    }
+                }
             }
         }
     }
@@ -148,12 +231,6 @@ class Solver{
             other.position -= n * mass_ratio * delta;
         }
     }   
-
-    void updateObjects(float dt){
-        for (auto& obj : objects){
-            obj.updatePos(dt);
-        }
-    }
 
     void renderObjects(){
         for (auto& obj : objects){
