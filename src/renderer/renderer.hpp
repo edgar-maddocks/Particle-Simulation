@@ -11,9 +11,17 @@
 
 class Renderer {
     public:
+        Renderer(Solver& solver);
+        ~Renderer();
+
+        void render();
 
     private:
-    
+        Solver& solver;
+
+        GLuint vertex_buffer;
+
+
 };
 
 #endif
