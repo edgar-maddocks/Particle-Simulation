@@ -1,6 +1,7 @@
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include <iostream>
+#include <iomanip> 
 #include <random>
 #include <tuple>
 #include <vector>
@@ -11,61 +12,50 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
 
-#include "consts.cpp"
-#include "utils.cpp"
+#include "constants/constants.hpp"
+#include "utils/utils.hpp"
 #include "boundaries/boundaries.hpp"
 #include "particle/particle.hpp"
 #include "solver/solver.hpp"
-#include "renderer/renderer.hpp"
-
 
 GLFWwindow* StartGLFW();
-
 
 int main() {
     GLFWwindow* window = StartGLFW();
     setUpGL(std::make_tuple(1.0f, 1.0f, 1.0f, 1.0f));
 
     Solver solver;
-    Renderer renderer(solver, std::thread::hardware_concurrency());
+    std::cout << std::thread::hardware_concurrency() << std::endl;
 
     float last_time = glfwGetTime();
     float last_spawn_time = last_time;
 
-    solver.addBoundary(CircleBoundingArea::create(SCREEN_WIDTH/2, SCREEN_HEIGHT/2, 400.0f));
-
-    renderer.start();
+    solver.addBoundary(CircleBoundingArea::create(GraphicsConstants::SCREEN_WIDTH/2, GraphicsConstants::SCREEN_HEIGHT/2, 400.0f));
+    solver.startUpdateThread();
 
     while (!glfwWindowShouldClose(window)) {
+        float frame_start_time = glfwGetTime();
+
         glClear(GL_COLOR_BUFFER_BIT);
         
         float current_time = glfwGetTime();
         float delta_time = current_time - last_time;
         last_time = current_time;
 
-        if (solver.getObjects().size() < MAX_OBJECTS && current_time - last_spawn_time >= SPAWN_DELAY){
-            last_spawn_time = current_time;
+        spawnParticles(solver, current_time, last_spawn_time);
 
-            auto& object = solver.addObject(SPAWN_POSITION, 3.0f);
-            solver.setObjectVelocity(object, glm::vec2({1.0f, -1.0f}) * SPAWN_VELOCITY);
-        }
+        gravityMousePull(solver, window);
 
-        int state = glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT);
-        if (state == GLFW_PRESS)
-        {
-            double xpos, ypos;
-            glfwGetCursorPos(window, &xpos, &ypos);
-            solver.mousePull(glm::vec2({xpos, SCREEN_HEIGHT - ypos}));
-        }
-
-        solver.update();
-        renderer.render();
+        solver.render();
 
         glfwSwapBuffers(window);
         glfwPollEvents();
+
+        float frame_end_time = glfwGetTime(); // End time of the frame
+        float fps = 1.0f / (frame_end_time - frame_start_time); // Time taken for the frame
+        std::cout << "\rFPS: " << std::fixed << std::setprecision(3) << fps << " Number of Particles: " << solver.getObjects().size() << "          " << std::flush; // Print frame time in milliseconds
     }
 
-    renderer.stop();
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;

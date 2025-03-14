@@ -10,12 +10,12 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
 
-#include "consts.cpp"
+#include "../constants/constants.hpp"
 #include "utils.cpp"
 #include "boundaries/boundaries.hpp"
 #include "particle/particle.hpp"
 #include "solver/solver.hpp"
-#include "simulators/airfoil.hpp"
+#include "simulators/airfoil/airfoil.hpp"
 
 GLFWwindow* StartGLFW();
 

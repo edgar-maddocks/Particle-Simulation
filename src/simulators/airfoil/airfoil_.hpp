@@ -9,7 +9,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
 
-#include "../consts.cpp"
+#include "../constants/constants.hpp"
 #include "../solver/solver.hpp"
 #include "../particle/particle.hpp"
 
@@ -61,7 +61,7 @@ class AirFoilSimulator {
 
         void initializeAir(){
             const float radius_padded = particle_radius + (2.0f * particle_radius);
-            const float num_particles_height = SCREEN_HEIGHT / radius_padded;
+            const float num_particles_height = GraphicsConstants::SCREEN_HEIGHT / radius_padded;
 
             for (int i = 0; i < 3; ++i){
                 for (int j = 0; j < num_particles_height; ++j){
@@ -82,7 +82,7 @@ class AirFoilSimulator {
             auto& objects = solver.getObjects();
             objects.erase(
                 std::remove_if(objects.begin(), objects.end(), [](const Particle& obj) {
-                    return obj.position.x > SCREEN_WIDTH;
+                    return obj.position.x > GraphicsConstants::SCREEN_WIDTH;
                 }),
                 objects.end()
             );
@@ -90,7 +90,7 @@ class AirFoilSimulator {
 
         void spawnNewParticles() {
             const float radius_padded = particle_radius + (2.0f * particle_radius);
-            const int num_particles_height = SCREEN_HEIGHT / radius_padded;
+            const int num_particles_height = GraphicsConstants::SCREEN_HEIGHT / radius_padded;
         
             auto& objects = solver.getObjects();
             for (int i = 0; i <= num_particles_height; ++i) { // Adjusted loop to include the top row
