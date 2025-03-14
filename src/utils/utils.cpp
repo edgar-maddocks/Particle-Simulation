@@ -1,5 +1,6 @@
 #include <iostream>
 #include <tuple>
+#include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 
@@ -20,6 +21,10 @@ GLFWwindow* StartGLFW() {
         return nullptr;
     }
     glfwMakeContextCurrent(window);
+
+    glewExperimental = GL_TRUE; 
+    glewInit();
+
     return window;
 }
 
@@ -45,7 +50,7 @@ void spawnParticles(Solver& solver, float current_time, float last_spawn_time){
     if (solver.getObjects().size() < SolverConstants::MAX_OBJECTS && current_time - last_spawn_time >= SolverConstants::SPAWN_DELAY){
         last_spawn_time = current_time;
 
-        auto& object = solver.addObject(SolverConstants::SPAWN_POSITION, 3.0f);
+        auto& object = solver.addObject(SolverConstants::SPAWN_POSITION);
         solver.setObjectVelocity(object, glm::vec2({1.0f, -1.0f}) * SolverConstants::SPAWN_VELOCITY);
     }
 }

@@ -7,8 +7,8 @@
 #include <vector>
 #include <memory>
 #include <thread>
+#include <GL/glew.h>
 #include <GLFW/glfw3.h>
-#include <GL/GL.h>
 #include <glm/glm.hpp>
 #include <glm/gtx/norm.hpp>
 
@@ -18,19 +18,21 @@
 #include "particle/particle.hpp"
 #include "solver/solver.hpp"
 
+#include "renderer/renderer.hpp"
+
 GLFWwindow* StartGLFW();
 
 int main() {
     GLFWwindow* window = StartGLFW();
     setUpGL(std::make_tuple(1.0f, 1.0f, 1.0f, 1.0f));
 
-    Solver solver;
-    std::cout << std::thread::hardware_concurrency() << std::endl;
+    Solver solver(5.0f);
+    Renderer renderer(solver);
 
     float last_time = glfwGetTime();
     float last_spawn_time = last_time;
 
-    solver.addBoundary(CircleBoundingArea::create(GraphicsConstants::SCREEN_WIDTH/2, GraphicsConstants::SCREEN_HEIGHT/2, 400.0f));
+    solver.addBoundary(CircleBoundingArea::create(GraphicsConstants::SCREEN_WIDTH/2, GraphicsConstants::SCREEN_HEIGHT/2, 700.0f));
     solver.startUpdateThread();
 
     while (!glfwWindowShouldClose(window)) {
@@ -46,14 +48,14 @@ int main() {
 
         gravityMousePull(solver, window);
 
-        solver.render();
+        renderer.render();
 
         glfwSwapBuffers(window);
         glfwPollEvents();
 
         float frame_end_time = glfwGetTime(); // End time of the frame
-        float fps = 1.0f / (frame_end_time - frame_start_time); // Time taken for the frame
-        std::cout << "\rFPS: " << std::fixed << std::setprecision(3) << fps << " Number of Particles: " << solver.getObjects().size() << "          " << std::flush; // Print frame time in milliseconds
+        float frame_time = (frame_end_time - frame_start_time) * 1000.0f; // Time taken for the frame
+        std::cout << "\rFrame Time: " << std::fixed << std::setprecision(3) << frame_time << "ms | Number of Particles: " << solver.getObjects().size() << "          " << std::flush; // Print frame time in milliseconds
     }
 
     glfwDestroyWindow(window);

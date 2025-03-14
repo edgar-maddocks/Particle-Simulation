@@ -16,9 +16,11 @@
 
 #include "solver.hpp"
 
-Solver::Solver() 
+Solver::Solver(float radius_) 
 : thread_pool(std::thread::hardware_concurrency() - 1) // subtract 1 for the update thread
-, update_thread_running(false) 
+, update_thread_running(false)
+, radius(radius_)
+, cell_size(2 * radius_)
 {};
 
 Solver::~Solver(){
@@ -28,17 +30,21 @@ Solver::~Solver(){
     }
 }
 
-Particle& Solver::addObject(glm::vec2 position, float radius){
+Particle& Solver::addObject(glm::vec2 position){
     Particle new_particle = Particle(position, radius);
-    updateCellSize(radius);
     return objects.emplace_back(new_particle);
 }
 
-void Solver::render(){
-    if (bounding_area){
-        renderBoundary();
+void Solver::renderBoundary(){
+    const int bounding_type = bounding_area->getType();
+    if (bounding_type == 1){
+        RectBoundingArea* rect_boundary = dynamic_cast<RectBoundingArea*>(bounding_area.get());
+        rect_boundary->draw();
     }
-    renderObjects();
+    else if (bounding_type == 2){
+        CircleBoundingArea* circle_boundary = dynamic_cast<CircleBoundingArea*>(bounding_area.get());
+        circle_boundary->draw(5000);
+    }
 }
 
 void Solver::startUpdateThread(){
@@ -208,13 +214,6 @@ void Solver::execInParallel(std::function<void(size_t, size_t)> func) {
     thread_pool.wait_for_tasks();
 }
 
-void Solver::updateCellSize(float r){
-    if (r > max_r){
-        max_r = r;
-        cell_size = 2 * r;
-    }
-}
-
 void Solver::updateGrid() {
     cell_map.clear();
     for (auto& obj: objects){
@@ -262,29 +261,11 @@ void Solver::checkOneParticleCollision(Particle& obj, Particle& other){
     }
 }  
 
-void Solver::renderObjects(){
-    for (auto& obj : objects){
-        obj.draw(100);
-    }
-}
-
 void Solver::checkAllParticleCollisions(size_t start, size_t end) {
     for (size_t i = start; i < end; ++i) {
         for (size_t j = i + 1; j < objects.size(); ++j) {
             checkOneParticleCollision(objects[i], objects[j]);
         }
-    }
-}
-
-void Solver::renderBoundary(){
-    const int bounding_type = bounding_area->getType();
-    if (bounding_type == 1){
-        RectBoundingArea* rect_boundary = dynamic_cast<RectBoundingArea*>(bounding_area.get());
-        rect_boundary->draw();
-    }
-    else if (bounding_type == 2){
-        CircleBoundingArea* circle_boundary = dynamic_cast<CircleBoundingArea*>(bounding_area.get());
-        circle_boundary->draw(5000);
     }
 }
 

@@ -24,12 +24,13 @@ struct pair_hash {
 
 class Solver {
     public:
-        Solver();
+        const float radius;
+        Solver(float radius);
         ~Solver();
 
-        Particle& addObject(glm::vec2 position, float radius);
+        Particle& addObject(glm::vec2 position);
 
-        void render();
+        void renderBoundary();
 
         void startUpdateThread();
 
@@ -76,15 +77,11 @@ class Solver {
         void execInParallel(std::function<void(size_t, size_t)> func);
 
         void updateGrid();
-        void updateCellSize(float r);
         std::pair<int, int> getCell(const glm::vec2& pos) const;
         void checkNeighbouringCells(const std::pair<int, int>& cell);
 
         void checkOneParticleCollision(Particle& obj, Particle& other);
         void checkAllParticleCollisions(size_t start, size_t end);
-
-        void renderObjects();
-        void renderBoundary();
 };
 
 #endif

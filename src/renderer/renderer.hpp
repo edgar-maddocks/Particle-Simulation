@@ -7,21 +7,22 @@
 #include <mutex>
 #include <condition_variable>
 
+#include <GL/glew.h>
+
 #include "../solver/solver.hpp"
 
 class Renderer {
     public:
         Renderer(Solver& solver);
         ~Renderer();
-
+        
+        void initialize();
         void render();
-
+    
     private:
         Solver& solver;
-
-        GLuint vertex_buffer;
-
-
-};
+        GLuint vao, vbo;
+        std::vector<glm::vec2> particle_positions;
+    };
 
 #endif
